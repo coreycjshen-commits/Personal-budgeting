@@ -1,1 +1,0 @@
-pbpaste > ~/budget-tracker/src/App.js
