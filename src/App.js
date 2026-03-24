@@ -214,12 +214,22 @@ export default function App() {
   }, [txns]);
 
   const months = useMemo(() => { const s = new Set(); txns.forEach(tx => s.add(tx.date.slice(0, 7))); return ["All", ...[...s].sort()]; }, [txns]);
+  const txnsWithBalance = useMemo(() => {
+    const sorted = [...txns].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    let bal = START_BAL;
+    return sorted.map(tx => {
+      if (tx.type === "income" && !tx.cash) bal += tx.amount;
+      else if (tx.type === "expense") bal -= tx.amount;
+      return { ...tx, balance: bal };
+    });
+  }, [txns]);
+
   const filteredTxns = useMemo(() => {
-    let f = [...txns].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+    let f = [...txnsWithBalance].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
     if (filter !== "All") f = f.filter(t => t.category === filter);
     if (monthFilter !== "All") f = f.filter(t => t.date.startsWith(monthFilter));
     return f;
-  }, [txns, filter, monthFilter]);
+  }, [txnsWithBalance, filter, monthFilter]);
 
   const addTxn = async () => {
     if (!form.date || !form.item || !form.amount) return;
@@ -599,7 +609,7 @@ export default function App() {
             <div style={{ maxHeight: 560, overflowY: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead><tr style={{ borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, background: C.card, zIndex: 1 }}>
-                  {["Date", "Description", "Category", "Amount", ""].map(h => <th key={h} style={{ padding: "14px 20px", textAlign: "left", color: C.muted, fontWeight: 500, fontSize: 11, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</th>)}
+                  {["Date", "Description", "Category", "Amount", "Balance", ""].map(h => <th key={h} style={{ padding: "14px 20px", textAlign: "left", color: C.muted, fontWeight: 500, fontSize: 11, fontFamily: sans, textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</th>)}
                 </tr></thead>
                 <tbody>{filteredTxns.map(tx => <tr key={tx.id} style={{ borderBottom: `1px solid ${C.light}` }}>
                   <td style={{ padding: "14px 20px", fontFamily: sans, fontSize: 13, color: C.muted }}>{new Date(tx.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
