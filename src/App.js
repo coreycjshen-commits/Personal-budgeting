@@ -14,7 +14,7 @@ const supa = {
 const FALLBACK_CATS = [
   { name: "Coaching", color: "#2D6A4F", type: "income" },
   { name: "Goodfin", color: "#40916C", type: "income" },
-  { name: "Sophia", color: "#9D4348", type: "expense" },
+  { name: "Sophia", color: "#F4B8D0", type: "expense" },
   { name: "Family", color: "#B07D3B", type: "expense" },
   { name: "Food", color: "#4A6FA5", type: "expense" },
   { name: "Subscription", color: "#6B5B95", type: "expense" },
