@@ -19,6 +19,7 @@ const FALLBACK_CATS = [
   { name: "Subscription", color: "#6B5B95", type: "expense" },
   { name: "Kalshi", color: "#C4963C", type: "expense" },
   { name: "Personal", color: "#7A6855", type: "expense" },
+  { name: "Robinhood", color: "#00C805", type: "investment" },
 ];
 
 const FALLBACK_TXNS = [
@@ -121,6 +122,7 @@ function computeBalances(txns) {
     var tx = sorted[i];
     if (tx.type === "income" && !tx.cash) { bal = bal + tx.amount; }
     else if (tx.type === "expense") { bal = bal - tx.amount; }
+    else if (tx.type === "investment") { bal = bal - tx.amount; }
     result[tx.id] = Math.round(bal * 100) / 100;
   }
   return result;
@@ -168,20 +170,24 @@ export default function App() {
   var balanceMap = useMemo(function() { return computeBalances(txns); }, [txns]);
 
   var stats = useMemo(function() {
-    var totInc = PRIOR_INCOME, totExp = 0, incByCat = {}, expByCat = {}, monthly = {};
+    var totInc = PRIOR_INCOME, totExp = 0, totInv = 0, incByCat = {}, expByCat = {}, monthly = {}, monthlyInv = {};
     txns.forEach(function(tx) {
       if (tx.type === "income") { totInc += tx.amount; incByCat[tx.category] = (incByCat[tx.category] || 0) + tx.amount; }
-      else { totExp += tx.amount; expByCat[tx.category] = (expByCat[tx.category] || 0) + tx.amount; }
+      else if (tx.type === "expense") { totExp += tx.amount; expByCat[tx.category] = (expByCat[tx.category] || 0) + tx.amount; }
+      else if (tx.type === "investment") { totInv += tx.amount; }
       var m = tx.date.slice(0,7);
       if (!monthly[m]) monthly[m] = { month: m, income: 0, expenses: 0 };
-      if (tx.type === "income") monthly[m].income += tx.amount; else monthly[m].expenses += tx.amount;
+      if (tx.type === "income") monthly[m].income += tx.amount; else if (tx.type === "expense") monthly[m].expenses += tx.amount;
+      if (!monthlyInv[m]) monthlyInv[m] = 0;
+      if (tx.type === "investment") monthlyInv[m] += tx.amount;
     });
     var bal = START_BAL + txns.reduce(function(s, tx) {
       if (tx.type === "income" && !tx.cash) return s + tx.amount;
       if (tx.type === "expense") return s - tx.amount;
+      if (tx.type === "investment") return s - tx.amount;
       return s;
     }, 0);
-    return { totInc: totInc, totExp: totExp, bal: bal, incByCat: incByCat, expByCat: expByCat, monthly: Object.values(monthly).sort(function(a,b) { return a.month.localeCompare(b.month); }), net: totInc - totExp };
+    return { totInc: totInc, totExp: totExp, totInv: totInv, monthlyInv: monthlyInv, bal: bal, incByCat: incByCat, expByCat: expByCat, monthly: Object.values(monthly).sort(function(a,b) { return a.month.localeCompare(b.month); }), net: totInc - totExp };
   }, [txns]);
 
   var coachingStats = useMemo(function() {
@@ -209,13 +215,13 @@ export default function App() {
       var mon = new Date(d); mon.setDate(diff);
       var wk = mon.toISOString().slice(0,10);
       if (!bW[wk]) bW[wk] = { key: wk, income: 0, expenses: 0 };
-      if (tx.type === "income") bW[wk].income += tx.amount; else bW[wk].expenses += tx.amount;
+      if (tx.type === "income") bW[wk].income += tx.amount; else if (tx.type === "expense") bW[wk].expenses += tx.amount;
       var mo = tx.date.slice(0,7);
       if (!bM[mo]) bM[mo] = { key: mo, income: 0, expenses: 0 };
-      if (tx.type === "income") bM[mo].income += tx.amount; else bM[mo].expenses += tx.amount;
+      if (tx.type === "income") bM[mo].income += tx.amount; else if (tx.type === "expense") bM[mo].expenses += tx.amount;
       var yr = tx.date.slice(0,4);
       if (!bY[yr]) bY[yr] = { key: yr, income: 0, expenses: 0 };
-      if (tx.type === "income") bY[yr].income += tx.amount; else bY[yr].expenses += tx.amount;
+      if (tx.type === "income") bY[yr].income += tx.amount; else if (tx.type === "expense") bY[yr].expenses += tx.amount;
     });
     var calc = function(obj) { return Object.values(obj).sort(function(a,b) { return b.key.localeCompare(a.key); }).map(function(p) {
       return Object.assign({}, p, { saved: p.income - p.expenses, rate: p.income > 0 ? ((p.income - p.expenses) / p.income * 100) : (p.expenses > 0 ? -100 : 0) });
@@ -305,6 +311,7 @@ export default function App() {
   var thisMonthData = savingsStats.months.find(function(m) { return m.key === nowMonth; });
   var monthRate = thisMonthData ? thisMonthData.rate : 0;
   var monthSaved = thisMonthData ? thisMonthData.saved : 0;
+  var monthInvested = stats.monthlyInv[nowMonth] || 0;
 
   return (
     <div style={{ background: CL.bg, minHeight: "100vh", color: CL.text }}>
@@ -330,7 +337,7 @@ export default function App() {
             <div><Lbl>Amount</Lbl><Inp type="number" step="0.01" value={form.amount} onChange={function(e) { setForm(Object.assign({}, form, { amount: e.target.value })); }} placeholder="0.00" /></div>
             <div><Lbl>Type</Lbl>
               <Sel value={form.type} onChange={function(e) { var v = e.target.value; var firstCat = cats.find(function(c) { return c.type === v; }); setForm(Object.assign({}, form, { type: v, category: firstCat ? firstCat.name : form.category })); }}>
-                <option value="income">Income</option><option value="expense">Expense</option>
+                <option value="income">Income</option><option value="expense">Expense</option><option value="investment">Investment</option>
               </Sel>
             </div>
             <div><Lbl>Category</Lbl>
@@ -359,6 +366,11 @@ export default function App() {
             <div style={{ fontSize: 11, color: CL.muted, fontFamily: sn, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>This Month</div>
             <div style={{ fontSize: 32, fontWeight: 700, color: monthRate >= 0 ? CL.green : CL.red, fontFamily: ft }}>{monthRate.toFixed(1)}%</div>
             <div style={{ fontSize: 12, color: CL.muted, fontFamily: sn, marginTop: 4 }}>{monthSaved >= 0 ? "Saved" : "Overspent"} {dollar(Math.abs(monthSaved))}</div>
+          </div>
+          <div style={{ background: CL.card, border: "1px solid " + CL.border, padding: "32px 36px", flex: "0 0 auto", minWidth: 150 }}>
+            <div style={{ fontSize: 11, color: CL.muted, fontFamily: sn, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Invested</div>
+            <div style={{ fontSize: 32, fontWeight: 700, color: "#00C805", fontFamily: ft }}>{dollar(stats.totInv)}</div>
+            <div style={{ fontSize: 12, color: CL.muted, fontFamily: sn, marginTop: 4 }}>{monthInvested > 0 ? dollar(monthInvested) + " this month" : "None this month"}</div>
           </div>
           <div style={{ background: CL.card, border: "1px solid " + CL.border, padding: "20px 28px", flex: 1, display: "flex", gap: 32, alignItems: "center", minWidth: 240 }}>
             {[
@@ -591,7 +603,7 @@ export default function App() {
                       <td style={{ padding: "12px 16px", fontFamily: sn, fontSize: 13, color: CL.muted }}>{new Date(tx.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
                       <td style={{ padding: "12px 16px", fontFamily: ft, fontSize: 15, fontWeight: 500 }}>{tx.item}{tx.cash ? " (Cash)" : ""}</td>
                       <td style={{ padding: "12px 16px" }}><span style={{ color: catColor(tx.category), fontSize: 13, fontFamily: sn, fontWeight: 500 }}>{tx.category}</span></td>
-                      <td style={{ padding: "12px 16px", fontFamily: ft, fontWeight: 600, fontSize: 16, color: tx.type === "income" ? CL.green : CL.red }}>{tx.type === "income" ? "+" : "-"}{dollar(tx.amount)}</td>
+                      <td style={{ padding: "12px 16px", fontFamily: ft, fontWeight: 600, fontSize: 16, color: tx.type === "income" ? CL.green : tx.type === "investment" ? "#00C805" : CL.red }}>{tx.type === "income" ? "+" : "-"}{dollar(tx.amount)}</td>
                       <td style={{ padding: "12px 16px", fontFamily: ft, fontSize: 14, color: CL.muted }}>{balText}</td>
                       <td style={{ padding: "12px 8px" }}><button onClick={function() { delTxn(tx.id); }} style={{ background: "none", border: "1px solid " + CL.border, color: CL.red, cursor: "pointer", fontSize: 11, padding: "3px 8px", borderRadius: 2, fontFamily: sn }}>Delete</button></td>
                     </tr>;
@@ -611,7 +623,7 @@ export default function App() {
               <div style={{ minWidth: 60 }}><Lbl>Color</Lbl><input type="color" value={newCat.color} onChange={function(e) { setNewCat(Object.assign({}, newCat, { color: e.target.value })); }} style={{ width: 42, height: 42, border: "1px solid " + CL.border, borderRadius: 2, cursor: "pointer", background: "transparent", padding: 2 }} /></div>
               <div style={{ minWidth: 120 }}><Lbl>Type</Lbl>
                 <Sel value={newCat.type} onChange={function(e) { setNewCat(Object.assign({}, newCat, { type: e.target.value })); }}>
-                  <option value="expense">Expense</option><option value="income">Income</option>
+                  <option value="expense">Expense</option><option value="income">Income</option><option value="investment">Investment</option>
                 </Sel>
               </div>
               <button onClick={addCat} style={{ fontFamily: sn, fontSize: 13, fontWeight: 500, padding: "10px 24px", height: 42, background: CL.text, color: "#fff", border: "none", borderRadius: 2, cursor: "pointer" }}>Add</button>
@@ -619,12 +631,12 @@ export default function App() {
           </Card>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 16 }}>
             {cats.map(function(c) {
-              var amt = c.type === "income" ? (stats.incByCat[c.name] || 0) : (stats.expByCat[c.name] || 0);
-              var tot = c.type === "income" ? stats.totInc : stats.totExp;
+              var amt = c.type === "income" ? (stats.incByCat[c.name] || 0) : c.type === "investment" ? stats.totInv : (stats.expByCat[c.name] || 0);
+              var tot = c.type === "income" ? stats.totInc : c.type === "investment" ? stats.totInv : stats.totExp;
               return <Card key={c.name} style={{ padding: "20px 24px", borderLeft: "3px solid " + c.color }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontFamily: ft, fontWeight: 700, fontSize: 16, color: c.color }}>{c.name}</span>
-                  <span style={{ fontFamily: sn, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: c.type === "income" ? CL.green : CL.red }}>{c.type}</span>
+                  <span style={{ fontFamily: sn, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: c.type === "income" ? CL.green : c.type === "investment" ? "#00C805" : CL.red }}>{c.type}</span>
                 </div>
                 <div style={{ fontFamily: ft, fontSize: 22, fontWeight: 700, marginTop: 8 }}>{dollar(amt)}</div>
                 <div style={{ fontFamily: sn, fontSize: 12, color: CL.muted, marginTop: 2 }}>{pct(amt, tot)}</div>
